@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Molecule Viewer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#0d0f14;--panel:#13161e;--panel2:#1a1d27;
+  --border:#252836;--accent:#00d4ff;--green:#4ade80;
+  --red:#f87171;--yellow:#fbbf24;--text:#cdd3e8;--muted:#4a5270;
+  --font:'Segoe UI',system-ui,sans-serif;--mono:'Consolas','Courier New',monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--font);
+     display:flex;height:100vh;overflow:hidden;}
+
+/* ── LEFT PANEL ── */
+#panel{
+  width:300px;min-width:300px;
+  background:var(--panel);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  z-index:10;
+}
+#panel-head{
+  padding:12px 14px 10px;
+  background:var(--panel2);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+#panel-head h1{font-size:14px;font-weight:700;color:var(--accent);letter-spacing:.05em;}
+#panel-head p{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:2px;}
+
+#panel-body{
+  flex:1;overflow-y:auto;padding:10px 12px;
+  display:flex;flex-direction:column;gap:10px;
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+}
+#panel-body::-webkit-scrollbar{width:4px;}
+#panel-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+.slabel{font-size:9px;font-family:var(--mono);color:var(--muted);
+        letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px;}
+
+select,textarea,input[type=number]{
+  width:100%;background:#0a0c11;color:var(--text);
+  border:1px solid var(--border);border-radius:6px;
+  font-family:var(--mono);outline:none;
+  transition:border-color .18s;
+}
+select:focus,textarea:focus,input[type=number]:focus{border-color:var(--accent);}
+
+select{padding:7px 10px;font-size:11px;cursor:pointer;}
+
+textarea#inp{
+  height:160px;padding:9px;font-size:10.5px;
+  line-height:1.65;resize:vertical;
+  color:#7dd3a8;
+}
+
+.fmt-row{display:flex;gap:6px;flex-wrap:wrap;}
+.fmt-btn{
+  flex:1;min-width:60px;
+  background:var(--panel2);color:var(--muted);
+  border:1px solid var(--border);border-radius:5px;
+  padding:5px 4px;font-size:10px;font-family:var(--font);
+  cursor:pointer;text-align:center;transition:all .15s;
+}
+.fmt-btn:hover{color:var(--text);border-color:#3a4060;}
+.fmt-btn.active{background:#0c1e2e;color:var(--accent);border-color:var(--accent);}
+
+.btn{
+  width:100%;border:none;border-radius:6px;padding:9px;
+  font-size:12px;font-weight:600;cursor:pointer;
+  transition:opacity .18s,transform .1s;
+}
+.btn:hover{opacity:.85;}.btn:active{transform:scale(.98);}
+.btn-load{background:linear-gradient(135deg,var(--accent),#0088aa);color:#000;}
+.btn-sec{background:var(--panel2);color:var(--text);border:1px solid var(--border);}
+.btn-sec:hover{border-color:var(--accent);}
+
+#parse-status{
+  font-size:10px;font-family:var(--mono);padding:5px 8px;
+  border-radius:5px;display:none;
+}
+.status-ok{background:#0e2018;color:var(--green);border:1px solid #1a4030;}
+.status-err{background:#1e0e0e;color:var(--red);border:1px solid #401a1a;}
+
+/* Atom list */
+#atomwrap{display:none;}
+#alist{display:flex;flex-direction:column;gap:5px;}
+.acard{
+  background:var(--panel2);border:1px solid var(--border);
+  border-radius:7px;padding:7px 9px;cursor:pointer;transition:border-color .15s;
+}
+.acard:hover{border-color:#3a4060;}
+.acard.sel{border-color:var(--accent);background:#0b1820;}
+.acard-hd{display:flex;align-items:center;gap:7px;margin-bottom:6px;}
+.adot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+.aname{font-size:11px;font-weight:700;font-family:var(--mono);}
+.aidx{margin-left:auto;font-size:9px;color:var(--muted);font-family:var(--mono);}
+.crow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;}
+.cf{display:flex;flex-direction:column;gap:2px;}
+.cf label{font-size:9px;font-family:var(--mono);color:var(--muted);letter-spacing:.08em;}
+.cf input{padding:3px 5px;font-size:10px;color:var(--green);}
+
+/* ── RIGHT: CANVAS ── */
+#viewer{
+  flex:1;display:flex;flex-direction:column;overflow:hidden;
+  position:relative;
+}
+#toolbar{
+  background:var(--panel);border-bottom:1px solid var(--border);
+  padding:7px 12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  flex-shrink:0;
+}
+.tb-lbl{font-size:9px;font-family:var(--mono);color:var(--muted);letter-spacing:.1em;}
+.tb-btn{
+  background:var(--panel2);color:var(--muted);
+  border:1px solid var(--border);border-radius:5px;
+  padding:4px 11px;cursor:pointer;font-size:11px;font-weight:600;
+  transition:all .15s;
+}
+.tb-btn:hover{color:var(--text);border-color:#3a4060;}
+.tb-btn.active{background:#0c1e2e;color:var(--accent);border-color:var(--accent);}
+.tb-sep{width:1px;height:18px;background:var(--border);margin:0 3px;}
+#hint{font-size:10px;font-family:var(--mono);color:var(--muted);margin-left:auto;}
+
+#cvwrap{
+  flex:1;position:relative;overflow:hidden;
+  background:radial-gradient(ellipse at 50% 45%,#0d1525 0%,var(--bg) 72%);
+}
+/* subtle grid */
+#cvwrap::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(0,212,255,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,255,.025) 1px,transparent 1px);
+  background-size:50px 50px;
+}
+canvas{display:block;width:100%;height:100%;cursor:grab;}
+canvas.grabbing{cursor:grabbing;}
+
+#tip{
+  position:absolute;background:var(--panel2);border:1px solid var(--accent);
+  border-radius:6px;padding:5px 10px;font-size:11px;font-family:var(--mono);
+  color:var(--text);pointer-events:none;opacity:0;transition:opacity .12s;
+  z-index:5;white-space:nowrap;
+}
+#tip.show{opacity:1;}
+
+#legend{
+  position:absolute;bottom:10px;right:10px;
+  background:rgba(13,15,20,.88);border:1px solid var(--border);
+  border-radius:7px;padding:7px 11px;
+  font-family:var(--mono);font-size:10px;color:var(--muted);
+  pointer-events:none;
+}
+#legend .le{display:flex;align-items:center;gap:6px;margin-bottom:2px;}
+#legend .le:last-child{margin-bottom:0;}
+.ldot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+
+#statbar{
+  background:var(--panel);border-top:1px solid var(--border);
+  padding:4px 14px;font-size:10px;font-family:var(--mono);
+  color:var(--muted);display:flex;gap:18px;flex-shrink:0;
+}
+#statbar span{color:var(--accent);}
+</style>
+</head>
+<body>
+
+<!-- ══ LEFT PANEL ══ -->
+<div id="panel">
+  <div id="panel-head">
+    <h1>⬡ 3D MOLECULE VIEWER</h1>
+    <p>FULLY OFFLINE · NO DEPENDENCIES</p>
+  </div>
+
+  <div id="panel-body">
+
+    <!-- Quick examples -->
+    <div>
+      <div class="slabel">Quick Examples</div>
+      <select onchange="loadEx(this.value);this.value=''">
+        <option value="">— Select molecule —</option>
+        <optgroup label="Simple">
+          <option value="water">Water H₂O</option>
+          <option value="co2">Carbon Dioxide CO₂</option>
+          <option value="ammonia">Ammonia NH₃</option>
+          <option value="methane">Methane CH₄</option>
+        </optgroup>
+        <optgroup label="Organic">
+          <option value="ethanol">Ethanol C₂H₅OH</option>
+          <option value="benzene">Benzene C₆H₆</option>
+          <option value="glucose">Glucose C₆H₁₂O₆</option>
+          <option value="aspirin">Aspirin C₉H₈O₄</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <!-- Format selector -->
+    <div>
+      <div class="slabel">Input Format</div>
+      <div class="fmt-row">
+        <div class="fmt-btn active" onclick="setFmt('xyz')" id="fb-xyz">Standard XYZ</div>
+        <div class="fmt-btn" onclick="setFmt('simple')" id="fb-simple">Simple XYZ</div>
+        <div class="fmt-btn" onclick="setFmt('gaussian')" id="fb-gaussian">Gaussian</div>
+        <div class="fmt-btn" onclick="setFmt('zmat')" id="fb-zmat">Z-Matrix</div>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div>
+      <div class="slabel">Coordinates</div>
+      <textarea id="inp" spellcheck="false"
+        placeholder="3&#10;Water&#10;O  0.000  0.000  0.119&#10;H  0.000  0.757 -0.477&#10;H  0.000 -0.757 -0.477"></textarea>
+    </div>
+
+    <div id="parse-status"></div>
+
+    <button class="btn btn-load" onclick="loadMol()">▶ Load Structure</button>
+
+    <!-- Atom list -->
+    <div id="atomwrap">
+      <div class="slabel" id="alist-lbl">Atoms</div>
+      <div id="alist"></div>
+      <button class="btn btn-sec" style="margin-top:7px;" onclick="exportXYZ()">↓ Export XYZ</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ RIGHT: VIEWER ══ -->
+<div id="viewer">
+  <div id="toolbar">
+    <span class="tb-lbl">MODE</span>
+    <button class="tb-btn active" id="tb-rot" onclick="setMode('rotate')">⟳ Rotate</button>
+    <button class="tb-btn" id="tb-edit" onclick="setMode('edit')">✎ Edit Atoms</button>
+    <div class="tb-sep"></div>
+    <span class="tb-lbl">STYLE</span>
+    <button class="tb-btn" id="tb-style" onclick="cycleStyle()">⬡ Ball&amp;Stick</button>
+    <button class="tb-btn" onclick="resetView()">⌂ Reset View</button>
+    <div id="hint">Load a molecule to begin</div>
+  </div>
+
+  <div id="cvwrap">
+    <canvas id="cv"></canvas>
+    <div id="tip"></div>
+    <div id="legend"></div>
+  </div>
+
+  <div id="statbar">
+    <div>ATOMS <span id="st-a">—</span></div>
+    <div>BONDS <span id="st-b">—</span></div>
+    <div>FORMAT <span id="st-f">—</span></div>
+    <div>ZOOM <span id="st-z">—</span></div>
+    <div>SELECTED <span id="st-s">none</span></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ═══════════════════════════════════════════════════════
+//  CPK DATA  (color, covalent radius Å, vdw radius Å)
+// ═══════════════════════════════════════════════════════
+const CPK={
+  H: {c:'#E8E8E8',r:.31,v:1.20}, He:{c:'#D9FFFF',r:.28,v:1.40},
+  Li:{c:'#CC80FF',r:1.28,v:1.82},Be:{c:'#C2FF00',r:.96,v:1.53},
+  B: {c:'#FFB5B5',r:.84,v:1.92}, C: {c:'#505050',r:.76,v:1.70},
+  N: {c:'#3050F8',r:.71,v:1.55}, O: {c:'#FF0D0D',r:.66,v:1.52},
+  F: {c:'#90E050',r:.57,v:1.47}, Ne:{c:'#B3E3F5',r:.58,v:1.54},
+  Na:{c:'#AB5CF2',r:1.66,v:2.27},Mg:{c:'#8AFF00',r:1.41,v:1.73},
+  Al:{c:'#BFA6A6',r:1.21,v:1.84},Si:{c:'#F0C8A0',r:1.11,v:2.10},
+  P: {c:'#FF8000',r:1.07,v:1.80}, S: {c:'#FFFF30',r:1.05,v:1.80},
+  Cl:{c:'#1FF01F',r:1.02,v:1.75}, Ar:{c:'#80D1E3',r:1.06,v:1.88},
+  K: {c:'#8F40D4',r:2.03,v:2.75},Ca:{c:'#3DFF00',r:1.76,v:2.31},
+  Fe:{c:'#E06633',r:1.32,v:2.04},Cu:{c:'#C88033',r:1.32,v:1.40},
+  Zn:{c:'#7D80B0',r:1.22,v:1.39},Br:{c:'#A62929',r:1.20,v:1.85},
+  I: {c:'#940094',r:1.39,v:1.98},
+};
+const DEF={c:'#FF69B4',r:.80,v:1.50};
+function ad(el){return CPK[el]||DEF;}
+
+// ═══════════════════════════════════════════════════════
+//  ATOMIC NUMBER → SYMBOL  (for Gaussian parser)
+// ═══════════════════════════════════════════════════════
+const ANUM={1:'H',2:'He',6:'C',7:'N',8:'O',9:'F',11:'Na',12:'Mg',
+            13:'Al',14:'Si',15:'P',16:'S',17:'Cl',18:'Ar',19:'K',
+            20:'Ca',26:'Fe',29:'Cu',30:'Zn',35:'Br',53:'I',
+            3:'Li',4:'Be',5:'B',10:'Ne'};
+function numToSym(n){return ANUM[+n]||('X'+n);}
+
+// ═══════════════════════════════════════════════════════
+//  EXAMPLES
+// ═══════════════════════════════════════════════════════
+const EX={
+water:`3
+Water (H2O)
+O   0.00000   0.00000   0.11779
+H   0.00000   0.75545  -0.47116
+H   0.00000  -0.75545  -0.47116`,
+
+co2:`3
+Carbon Dioxide (CO2)
+C   0.00000   0.00000   0.00000
+O   1.16000   0.00000   0.00000
+O  -1.16000   0.00000   0.00000`,
+
+ammonia:`4
+Ammonia (NH3)
+N   0.00000   0.00000   0.11593
+H   0.00000   0.93900  -0.27050
+H   0.81298  -0.46950  -0.27050
+H  -0.81298  -0.46950  -0.27050`,
+
+methane:`5
+Methane (CH4)
+C   0.00000   0.00000   0.00000
+H   0.62753   0.62753   0.62753
+H  -0.62753  -0.62753   0.62753
+H  -0.62753   0.62753  -0.62753
+H   0.62753  -0.62753  -0.62753`,
+
+ethanol:`9
+Ethanol (C2H5OH)
+C   0.00000   0.00000   0.00000
+C   1.51950   0.00000   0.00000
+O   2.06100   1.18700   0.00000
+H  -0.39200   1.01700   0.00000
+H  -0.39200  -0.51000   0.88300
+H  -0.39200  -0.51000  -0.88300
+H   1.88500  -0.51400   0.88700
+H   1.88500  -0.51400  -0.88700
+H   1.72400   1.81600   0.00000`,
+
+benzene:`12
+Benzene (C6H6)
+C   1.40272   0.00000   0.00000
+C   0.70136   1.21473   0.00000
+C  -0.70136   1.21473   0.00000
+C  -1.40272   0.00000   0.00000
+C  -0.70136  -1.21473   0.00000
+C   0.70136  -1.21473   0.00000
+H   2.49022   0.00000   0.00000
+H   1.24511   2.15666   0.00000
+H  -1.24511   2.15666   0.00000
+H  -2.49022   0.00000   0.00000
+H  -1.24511  -2.15666   0.00000
+H   1.24511  -2.15666   0.00000`,
+
+glucose:`24
+Glucose (C6H12O6) - open chain
+C   0.00000   0.00000   0.00000
+C   1.51800   0.00000   0.00000
+C   2.09000   1.39400   0.00000
+C   3.61700   1.39400   0.00000
+C   4.18900   2.78800   0.00000
+C   5.71600   2.78800   0.00000
+O  -0.56000   1.15800   0.00000
+O   1.99200  -1.10200   0.68700
+O   1.62700   2.45600   0.73400
+O   4.12800   0.40200   0.80400
+O   3.70800   3.87100   0.65300
+O   6.18600   2.81200  -1.31500
+H  -0.40000  -0.99200   0.00000
+H  -0.37000   0.49700   0.88500
+H   1.88600   0.20100  -1.02700
+H   1.74000   1.60700  -1.03000
+H   4.00800   1.23100  -1.01200
+H   3.84300   3.58600  -1.01800
+H   3.97900   2.75500   1.02700
+H   6.10700   3.73900   0.45500
+H   5.92600   1.96000   0.48800
+H  -0.22100   2.02700  -0.37200
+H   1.66600  -1.98700   0.41300
+H   7.15100   2.78400  -1.30900`,
+
+aspirin:`21
+Aspirin (C9H8O4)
+C   0.00000   0.00000   0.00000
+C   0.00000   1.39700   0.00000
+C   1.20900   2.08800   0.00000
+C   2.42100   1.40300   0.00000
+C   2.42100   0.00700   0.00000
+C   1.20900  -0.69100   0.00000
+C  -1.31700   2.14300   0.00000
+O  -1.31700   3.37000   0.00000
+O  -2.37000   1.41400   0.00000
+C   3.72900  -0.76000   0.00000
+O   4.86000  -0.24300   0.00000
+O   3.72900  -1.98800   0.00000
+H  -0.94200  -0.53700   0.00000
+H   1.20900   3.17600   0.00000
+H   3.35900   1.94800   0.00000
+H   1.20900  -1.77900   0.00000
+H  -2.26400  -0.52400   0.00000
+H   4.65600  -2.38700   0.00000
+H   5.73500  -0.67800   0.00000
+H  -0.37000   3.85000   0.00000
+H   3.73200   0.76200   0.00000`
+};
+
+// ═══════════════════════════════════════════════════════
+//  PARSERS
+// ═══════════════════════════════════════════════════════
+let currentFmt='xyz';
+
+function setFmt(f){
+  currentFmt=f;
+  ['xyz','simple','gaussian','zmat'].forEach(k=>{
+    document.getElementById('fb-'+k).classList.toggle('active',k===f);
+  });
+  // Show placeholder
+  const ph={
+    xyz:`3\nWater\nO  0.000  0.000  0.119\nH  0.000  0.757 -0.477\nH  0.000 -0.757 -0.477`,
+    simple:`O  0.000  0.000  0.119\nH  0.000  0.757 -0.477\nH  0.000 -0.757 -0.477`,
+    gaussian:`1   8   0   0.00000   0.00000   0.11779\n2   1   0   0.00000   0.75545  -0.47116\n3   1   0   0.00000  -0.75545  -0.47116`,
+    zmat:`O\nH 1 0.9572\nH 1 0.9572 2 104.52`
+  };
+  document.getElementById('inp').placeholder=ph[f];
+}
+
+// --- Standard XYZ ---
+function parseStdXYZ(txt){
+  const lines=txt.trim().split('\n').map(l=>l.trim()).filter(l=>l);
+  if(lines.length<1) return {err:'Empty input'};
+  const n=parseInt(lines[0]);
+  const hasCount=!isNaN(n);
+  const start=hasCount?2:0;
+  const atoms=[];
+  for(let i=start;i<lines.length;i++){
+    const p=lines[i].split(/\s+/);
+    if(p.length<4) continue;
+    const el=normalizeEl(p[0]);
+    const x=parseFloat(p[1]),y=parseFloat(p[2]),z=parseFloat(p[3]);
+    if(isNaN(x)||isNaN(y)||isNaN(z)) continue;
+    atoms.push({element:el,x,y,z});
+  }
+  if(atoms.length===0) return {err:'No valid atom lines found'};
+  return {atoms};
+}
+
+// --- Simple XYZ (just El X Y Z, no count/comment) ---
+function parseSimpleXYZ(txt){
+  const lines=txt.trim().split('\n').map(l=>l.trim()).filter(l=>l&&!/^\d+$/.test(l));
+  const atoms=[];
+  for(const line of lines){
+    const p=line.split(/\s+/);
+    if(p.length<4) continue;
+    // Skip if first token is purely a number (count line)
+    if(/^\d+$/.test(p[0])) continue;
+    const el=normalizeEl(p[0]);
+    const x=parseFloat(p[1]),y=parseFloat(p[2]),z=parseFloat(p[3]);
+    if(isNaN(x)||isNaN(y)||isNaN(z)) continue;
+    atoms.push({element:el,x,y,z});
+  }
+  if(atoms.length===0) return {err:'No valid lines (expected: El X Y Z per line)'};
+  return {atoms};
+}
+
+// --- Gaussian output ---
+// Format: index  atomicNum  type  x  y  z
+// OR:     index  symbol     x     y  z
+function parseGaussian(txt){
+  const lines=txt.trim().split('\n').map(l=>l.trim()).filter(l=>l);
+  const atoms=[];
+  for(const line of lines){
+    if(/^-+$/.test(line)||/^[A-Za-z\s]+$/.test(line)) continue;
+    const p=line.split(/\s+/);
+    if(p.length<4) continue;
+    // try: idx atomicNum type x y z
+    if(p.length>=6 && /^\d+$/.test(p[0]) && /^\d+$/.test(p[1])){
+      const el=numToSym(p[1]);
+      const x=parseFloat(p[3]),y=parseFloat(p[4]),z=parseFloat(p[5]);
+      if(!isNaN(x)&&!isNaN(y)&&!isNaN(z)) { atoms.push({element:el,x,y,z}); continue; }
+    }
+    // try: idx symbol x y z
+    if(p.length>=5 && /^\d+$/.test(p[0]) && isNaN(Number(p[1]))){
+      const el=normalizeEl(p[1]);
+      const x=parseFloat(p[2]),y=parseFloat(p[3]),z=parseFloat(p[4]);
+      if(!isNaN(x)&&!isNaN(y)&&!isNaN(z)) { atoms.push({element:el,x,y,z}); continue; }
+    }
+    // try: idx atomicNum x y z (5 cols)
+    if(p.length>=5 && /^\d+$/.test(p[0]) && /^\d+$/.test(p[1])){
+      const el=numToSym(p[1]);
+      const x=parseFloat(p[2]),y=parseFloat(p[3]),z=parseFloat(p[4]);
+      if(!isNaN(x)&&!isNaN(y)&&!isNaN(z)) { atoms.push({element:el,x,y,z}); continue; }
+    }
+  }
+  if(atoms.length===0) return {err:'Could not parse Gaussian format'};
+  return {atoms};
+}
+
+// --- Z-Matrix ---
+// Supports:
+//   El
+//   El  i  R
+//   El  i  R  j  A
+//   El  i  R  j  A  k  D
+// where i,j,k are 1-based atom indices
+function parseZMatrix(txt){
+  const lines=txt.trim().split('\n')
+    .map(l=>l.replace(/#.*/,'').trim())
+    .filter(l=>l&&!l.match(/^[A-Z][a-z]*\s*$/i&&l.split(/\s+/).length<2?false:false));
+  
+  const atoms=[];
+  const vars={};  // named variables
+
+  // first pass: collect variable definitions (name = value)
+  for(const line of lines){
+    const vm=line.match(/^([A-Za-z_]\w*)\s*=\s*([\d.eE+\-]+)$/);
+    if(vm) vars[vm[1]]=parseFloat(vm[2]);
+  }
+
+  function resolveVal(s){
+    const n=parseFloat(s);
+    if(!isNaN(n)) return n;
+    if(s in vars) return vars[s];
+    // Negative variable: -rXX
+    if(s.startsWith('-')&&s.slice(1) in vars) return -vars[s.slice(1)];
+    return NaN;
+  }
+
+  const DEG=Math.PI/180;
+
+  for(const line of lines){
+    if(line.match(/^[A-Za-z_]\w*\s*=\s*[\d.eE+\-]+$/)) continue; // var def
+    const p=line.split(/[\s,]+/);
+    if(!p[0]) continue;
+    const el=normalizeEl(p[0]);
+
+    if(atoms.length===0){
+      // First atom at origin
+      atoms.push({element:el,x:0,y:0,z:0}); continue;
+    }
+
+    if(atoms.length===1){
+      // Second atom: along +z from first
+      if(p.length<3) return {err:`Line ${atoms.length+1}: need bond length`};
+      const R=resolveVal(p[2]);
+      if(isNaN(R)) return {err:`Cannot resolve bond length "${p[2]}"`};
+      const ref=atoms[+p[1]-1];
+      if(!ref) return {err:`Reference atom ${p[1]} not found`};
+      atoms.push({element:el,x:ref.x,y:ref.y,z:ref.z+R}); continue;
+    }
+
+    if(atoms.length===2){
+      // Third atom: in xz plane
+      if(p.length<5) return {err:`Line ${atoms.length+1}: need bond+angle`};
+      const R=resolveVal(p[2]);
+      const A=resolveVal(p[4])*DEG;
+      if(isNaN(R)||isNaN(A)) return {err:`Cannot resolve R or A on line ${atoms.length+1}`};
+      const i1=+p[1]-1, i2=+p[3]-1;
+      if(!atoms[i1]||!atoms[i2]) return {err:`Reference atoms not found on line ${atoms.length+1}`};
+      const ref=atoms[i1];
+      // place in xz plane
+      atoms.push({element:el,
+        x:ref.x+R*Math.sin(A),
+        y:ref.y,
+        z:ref.z-R*Math.cos(A)
+      }); continue;
+    }
+
+    // General case: R, A, dihedral D
+    if(p.length<7) return {err:`Line ${atoms.length+1}: need R, A, and dihedral`};
+    const R=resolveVal(p[2]);
+    const A=resolveVal(p[4])*DEG;
+    const D=resolveVal(p[6])*DEG;
+    if(isNaN(R)||isNaN(A)||isNaN(D)) return {err:`Cannot resolve values on line ${atoms.length+1}`};
+    const iB=+p[1]-1, iA=+p[3]-1, iD=+p[5]-1;
+    if(!atoms[iB]||!atoms[iA]||!atoms[iD]) return {err:`Reference atoms not found on line ${atoms.length+1}`};
+
+    const B={x:atoms[iB].x,y:atoms[iB].y,z:atoms[iB].z};
+    const Av={x:atoms[iA].x,y:atoms[iA].y,z:atoms[iA].z};
+    const Dv={x:atoms[iD].x,y:atoms[iD].y,z:atoms[iD].z};
+
+    // BC unit vector
+    const bc=norm3(sub3(B,Av));
+    // n1 = (D→A) × bc
+    const n1=norm3(cross3(sub3(Av,Dv),bc));
+    // n2 = bc × n1
+    const n2=cross3(bc,n1);
+
+    // New position = B + R*(sin(A)*cos(D)*n1 - sin(A)*sin(D)*n2 + cos(A)*bc... wait
+    // Standard ZMatrix convention:
+    const sinA=Math.sin(A), cosA=Math.cos(A);
+    const sinD=Math.sin(D), cosD=Math.cos(D);
+    // d = -R*cosA * bc + R*sinA*(cosD*n1 + sinD*n2) ... actually:
+    // new = B + R*(-cosA*bc + sinA*cosD*n1 - sinA*sinD*n2)  [NWCHEM/Gaussian sign convention]
+    const pos={
+      x: B.x + R*(-cosA*bc.x + sinA*cosD*n1.x - sinA*sinD*n2.x),
+      y: B.y + R*(-cosA*bc.y + sinA*cosD*n1.y - sinA*sinD*n2.y),
+      z: B.z + R*(-cosA*bc.z + sinA*cosD*n1.z - sinA*sinD*n2.z)
+    };
+    atoms.push({element:el,...pos});
+  }
+
+  if(atoms.length===0) return {err:'No atoms parsed from Z-Matrix'};
+  return {atoms};
+}
+
+// Vector helpers
+function sub3(a,b){return{x:a.x-b.x,y:a.y-b.y,z:a.z-b.z};}
+function cross3(a,b){return{x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.x};}
+function dot3(a,b){return a.x*b.x+a.y*b.y+a.z*b.z;}
+function len3(a){return Math.sqrt(a.x*a.x+a.y*a.y+a.z*a.z);}
+function norm3(a){const l=len3(a);if(l<1e-10)return{x:0,y:0,z:1};return{x:a.x/l,y:a.y/l,z:a.z/l};}
+
+function normalizeEl(s){
+  if(!s) return 'X';
+  // Handle all-uppercase like "CA","FE" → "Ca","Fe"
+  if(/^[A-Z]{2,}$/.test(s)) return s[0]+s.slice(1).toLowerCase();
+  return s[0].toUpperCase()+s.slice(1).toLowerCase();
+}
+
+// Master parse dispatcher
+function parseInput(txt,fmt){
+  switch(fmt){
+    case 'xyz':      return parseStdXYZ(txt);
+    case 'simple':   return parseSimpleXYZ(txt);
+    case 'gaussian': return parseGaussian(txt);
+    case 'zmat':     return parseZMatrix(txt);
+  }
+  return {err:'Unknown format'};
+}
+
+// ═══════════════════════════════════════════════════════
+//  BOND DETECTION  (accurate covalent radii)
+// ═══════════════════════════════════════════════════════
+function detectBonds(atoms){
+  const bonds=[];
+  for(let i=0;i<atoms.length;i++){
+    for(let j=i+1;j<atoms.length;j++){
+      const ri=ad(atoms[i].element).r;
+      const rj=ad(atoms[j].element).r;
+      // Tolerance: 1.3× sum of covalent radii (generous but not too loose)
+      const thresh=(ri+rj)*1.30;
+      // Minimum distance to avoid pairing hydrogens that are close due to Z-matrix quirks
+      const minDist=0.50;
+      const dx=atoms[i].x-atoms[j].x;
+      const dy=atoms[i].y-atoms[j].y;
+      const dz=atoms[i].z-atoms[j].z;
+      const d=Math.sqrt(dx*dx+dy*dy+dz*dz);
+      if(d>minDist&&d<thresh) bonds.push({i,j,len:d});
+    }
+  }
+  return bonds;
+}
+
+// ═══════════════════════════════════════════════════════
+//  3D MATH  (pure JS rotation matrices)
+// ═══════════════════════════════════════════════════════
+function mI(){return[[1,0,0],[0,1,0],[0,0,1]];}
+function mMul(A,B){
+  const C=[[0,0,0],[0,0,0],[0,0,0]];
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++)for(let k=0;k<3;k++)C[i][j]+=A[i][k]*B[k][j];
+  return C;
+}
+function mApply(M,v){
+  return[M[0][0]*v[0]+M[0][1]*v[1]+M[0][2]*v[2],
+         M[1][0]*v[0]+M[1][1]*v[1]+M[1][2]*v[2],
+         M[2][0]*v[0]+M[2][1]*v[1]+M[2][2]*v[2]];
+}
+function mT(M){return[[M[0][0],M[1][0],M[2][0]],[M[0][1],M[1][1],M[2][1]],[M[0][2],M[1][2],M[2][2]]];}
+function rX(a){const c=Math.cos(a),s=Math.sin(a);return[[1,0,0],[0,c,-s],[0,s,c]];}
+function rY(a){const c=Math.cos(a),s=Math.sin(a);return[[c,0,s],[0,1,0],[-s,0,c]];}
+
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+let atoms=[], bonds=[];
+let rotMat=mI();
+let zoom=60, panX=0, panY=0;
+let selIdx=-1, hoverIdx=-1;
+let mode='rotate';
+let styleIdx=0;
+const STYLES=['Ball&Stick','Space Fill','Wireframe'];
+let isDrag=false, lastMX=0, lastMY=0, lastTouchDist=0;
+let needsRender=true;
+
+const cv=document.getElementById('cv');
+const ctx=cv.getContext('2d');
+
+// ═══════════════════════════════════════════════════════
+//  CANVAS RESIZE  — fills available space
+// ═══════════════════════════════════════════════════════
+function resizeCanvas(){
+  const wrap=document.getElementById('cvwrap');
+  const dpr=window.devicePixelRatio||1;
+  const w=wrap.clientWidth, h=wrap.clientHeight;
+  cv.width=Math.round(w*dpr);
+  cv.height=Math.round(h*dpr);
+  cv.style.width=w+'px';
+  cv.style.height=h+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  mark();
+}
+window.addEventListener('resize',()=>{resizeCanvas();});
+
+// ═══════════════════════════════════════════════════════
+//  PROJECT / UNPROJECT
+// ═══════════════════════════════════════════════════════
+function W(){return cv.width/(window.devicePixelRatio||1);}
+function H(){return cv.height/(window.devicePixelRatio||1);}
+
+function project(x,y,z){
+  const v=mApply(rotMat,[x,y,z]);
+  return{sx:W()/2+panX+v[0]*zoom, sy:H()/2+panY-v[1]*zoom, sz:v[2]};
+}
+function unproject(sx,sy,sz){
+  const rx=(sx-W()/2-panX)/zoom;
+  const ry=-(sy-H()/2-panY)/zoom;
+  const r=mApply(mT(rotMat),[rx,ry,sz]);
+  return r;
+}
+
+// ═══════════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════════
+function hexRGB(hex){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return{r,g,b};
+}
+function lighter(hex,f){
+  const{r,g,b}=hexRGB(hex);
+  return`rgb(${Math.min(255,r+(255-r)*f)|0},${Math.min(255,g+(255-g)*f)|0},${Math.min(255,b+(255-b)*f)|0})`;
+}
+function darker(hex,f){
+  const{r,g,b}=hexRGB(hex);
+  return`rgb(${(r*(1-f))|0},${(g*(1-f))|0},${(b*(1-f))|0})`;
+}
+
+function render(){
+  if(!needsRender) return;
+  needsRender=false;
+  const cw=W(), ch=H();
+  ctx.clearRect(0,0,cw,ch);
+
+  if(atoms.length===0){
+    ctx.fillStyle='#1e2440';
+    ctx.font='500 13px Segoe UI,sans-serif';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText('Select an example or paste XYZ coordinates',cw/2,ch/2);
+    return;
+  }
+
+  // Project
+  const proj=atoms.map((a,i)=>{
+    const p=project(a.x,a.y,a.z);
+    const info=ad(a.element);
+    let r;
+    if(styleIdx===1) r=Math.max(6,info.v*zoom*0.42);
+    else if(styleIdx===2) r=Math.max(3,zoom*0.07);
+    else r=Math.max(5,info.v*zoom*0.23);
+    return{...p,r,color:info.c,element:a.element,idx:i};
+  });
+
+  const sorted=[...proj].sort((a,b)=>a.sz-b.sz);
+
+  // Bonds
+  if(styleIdx!==1){
+    bonds.forEach(({i,j})=>{
+      const a=proj[i],b=proj[j];
+      const mx=(a.sx+b.sx)/2, my=(a.sy+b.sy)/2;
+      const bw=styleIdx===2?2:Math.max(2,zoom*0.065);
+      ctx.lineWidth=bw;
+      ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(mx,my);
+      ctx.strokeStyle=styleIdx===2?a.color:'#5a6080'; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(b.sx,b.sy);
+      ctx.strokeStyle=styleIdx===2?b.color:'#5a6080'; ctx.stroke();
+    });
+  }
+
+  // Atoms
+  if(styleIdx!==2){
+    sorted.forEach(p=>{
+      const isSel=p.idx===selIdx, isHov=p.idx===hoverIdx;
+      if(isSel){
+        ctx.beginPath(); ctx.arc(p.sx,p.sy,p.r+9,0,Math.PI*2);
+        ctx.fillStyle='rgba(0,212,255,.2)'; ctx.fill();
+        ctx.beginPath(); ctx.arc(p.sx,p.sy,p.r+5,0,Math.PI*2);
+        ctx.fillStyle='rgba(0,212,255,.12)'; ctx.fill();
+      } else if(isHov){
+        ctx.beginPath(); ctx.arc(p.sx,p.sy,p.r+5,0,Math.PI*2);
+        ctx.fillStyle='rgba(255,255,255,.08)'; ctx.fill();
+      }
+      const g=ctx.createRadialGradient(
+        p.sx-p.r*.35, p.sy-p.r*.35, p.r*.04,
+        p.sx, p.sy, p.r
+      );
+      g.addColorStop(0,lighter(p.color,.78));
+      g.addColorStop(.45,p.color);
+      g.addColorStop(1,darker(p.color,.65));
+      ctx.beginPath(); ctx.arc(p.sx,p.sy,p.r,0,Math.PI*2);
+      ctx.fillStyle=g; ctx.fill();
+      if(isSel){
+        ctx.beginPath(); ctx.arc(p.sx,p.sy,p.r,0,Math.PI*2);
+        ctx.strokeStyle='#00d4ff'; ctx.lineWidth=2; ctx.stroke();
+      }
+      const ls=Math.min(p.r*.78,13);
+      if(ls>5.5){
+        const{r,g:gv,b}=hexRGB(p.color);
+        const bright=(r*299+gv*587+b*114)/1000;
+        ctx.fillStyle=bright>130?'#101010':'#f0f4ff';
+        ctx.font=`700 ${ls}px Consolas,monospace`;
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(p.element,p.sx,p.sy+.5);
+      }
+    });
+  } else {
+    sorted.forEach(p=>{
+      ctx.beginPath(); ctx.arc(p.sx,p.sy,p.r*3.5,0,Math.PI*2);
+      ctx.fillStyle=p.color; ctx.fill();
+    });
+  }
+
+  document.getElementById('st-z').textContent=zoom.toFixed(0)+'px/Å';
+  document.getElementById('st-s').textContent=selIdx>=0?`${atoms[selIdx].element} #${selIdx+1}`:'none';
+}
+
+function mark(){needsRender=true; requestAnimationFrame(render);}
+
+// ═══════════════════════════════════════════════════════
+//  HIT TEST
+// ═══════════════════════════════════════════════════════
+function hitTest(mx,my){
+  let best=-1, bestZ=-Infinity;
+  atoms.forEach((a,i)=>{
+    const p=project(a.x,a.y,a.z);
+    const info=ad(a.element);
+    let r;
+    if(styleIdx===1) r=Math.max(6,info.v*zoom*0.42);
+    else r=Math.max(6,info.v*zoom*0.23);
+    const dx=mx-p.sx, dy=my-p.sy;
+    if(dx*dx+dy*dy<=r*r&&p.sz>bestZ){best=i;bestZ=p.sz;}
+  });
+  return best;
+}
+
+// ═══════════════════════════════════════════════════════
+//  MOUSE / TOUCH
+// ═══════════════════════════════════════════════════════
+function cvXY(e,touch){
+  const rect=cv.getBoundingClientRect();
+  const src=touch||e;
+  return{
+    x:(src.clientX-rect.left)*(W()/rect.width),
+    y:(src.clientY-rect.top)*(H()/rect.height)
+  };
+}
+
+cv.addEventListener('mousedown',e=>{
+  e.preventDefault();
+  const{x,y}=cvXY(e);
+  isDrag=true; lastMX=x; lastMY=y;
+  cv.classList.add('grabbing');
+  if(mode==='edit'){selIdx=hitTest(x,y); buildAlist(); mark();}
+});
+
+cv.addEventListener('mousemove',e=>{
+  const{x,y}=cvXY(e);
+  if(isDrag){
+    const dx=x-lastMX, dy=y-lastMY;
+    if(mode==='rotate'){
+      rotMat=mMul(rX(dy*.009),mMul(rY(dx*.009),rotMat));
+    } else if(selIdx>=0){
+      const a=atoms[selIdx];
+      const p=project(a.x,a.y,a.z);
+      const w=unproject(p.sx+dx,p.sy+dy,p.sz);
+      a.x=w[0]; a.y=w[1]; a.z=w[2];
+      bonds=detectBonds(atoms); updateCoords();
+    } else { panX+=dx; panY+=dy; }
+    lastMX=x; lastMY=y; mark();
+  } else {
+    const h=hitTest(x,y);
+    if(h!==hoverIdx){hoverIdx=h; mark();}
+    showTip(e.clientX,e.clientY,h);
+  }
+});
+
+cv.addEventListener('mouseup',()=>{isDrag=false; cv.classList.remove('grabbing');});
+cv.addEventListener('mouseleave',()=>{isDrag=false; cv.classList.remove('grabbing'); hoverIdx=-1; hideTip(); mark();});
+
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  zoom=Math.max(8,Math.min(500,zoom*(e.deltaY>0?.87:1.15)));
+  mark();
+},{passive:false});
+
+cv.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  if(e.touches.length===1){
+    const{x,y}=cvXY(e,e.touches[0]);
+    isDrag=true; lastMX=x; lastMY=y;
+    if(mode==='edit'){selIdx=hitTest(x,y); buildAlist(); mark();}
+  } else if(e.touches.length===2){
+    const dx=e.touches[0].clientX-e.touches[1].clientX;
+    const dy=e.touches[0].clientY-e.touches[1].clientY;
+    lastTouchDist=Math.sqrt(dx*dx+dy*dy);
+  }
+},{passive:false});
+
+cv.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  if(e.touches.length===1&&isDrag){
+    const{x,y}=cvXY(e,e.touches[0]);
+    const dx=x-lastMX, dy=y-lastMY;
+    if(mode==='rotate'){
+      rotMat=mMul(rX(dy*.009),mMul(rY(dx*.009),rotMat));
+    } else if(selIdx>=0){
+      const a=atoms[selIdx];
+      const p=project(a.x,a.y,a.z);
+      const w=unproject(p.sx+dx,p.sy+dy,p.sz);
+      a.x=w[0]; a.y=w[1]; a.z=w[2];
+      bonds=detectBonds(atoms); updateCoords();
+    } else {panX+=dx; panY+=dy;}
+    lastMX=x; lastMY=y; mark();
+  } else if(e.touches.length===2){
+    const dx=e.touches[0].clientX-e.touches[1].clientX;
+    const dy=e.touches[0].clientY-e.touches[1].clientY;
+    const d=Math.sqrt(dx*dx+dy*dy);
+    zoom=Math.max(8,Math.min(500,zoom*d/lastTouchDist));
+    lastTouchDist=d; mark();
+  }
+},{passive:false});
+
+cv.addEventListener('touchend',()=>{isDrag=false;});
+
+// ═══════════════════════════════════════════════════════
+//  TOOLTIP
+// ═══════════════════════════════════════════════════════
+const tip=document.getElementById('tip');
+function showTip(cx,cy,idx){
+  if(idx<0){hideTip();return;}
+  const a=atoms[idx];
+  tip.textContent=`${a.element} #${idx+1}  (${a.x.toFixed(3)}, ${a.y.toFixed(3)}, ${a.z.toFixed(3)}) Å`;
+  const wr=document.getElementById('cvwrap').getBoundingClientRect();
+  tip.style.left=Math.min(cx-wr.left+14,wr.width-230)+'px';
+  tip.style.top=(cy-wr.top+14)+'px';
+  tip.classList.add('show');
+}
+function hideTip(){tip.classList.remove('show');}
+
+// ═══════════════════════════════════════════════════════
+//  LEGEND
+// ═══════════════════════════════════════════════════════
+function updateLegend(){
+  const seen={};
+  atoms.forEach(a=>{if(!seen[a.element])seen[a.element]=ad(a.element).c;});
+  document.getElementById('legend').innerHTML=
+    Object.entries(seen).map(([el,c])=>
+      `<div class="le"><div class="ldot" style="background:${c};box-shadow:0 0 4px ${c}"></div>${el}</div>`
+    ).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  ATOM LIST
+// ═══════════════════════════════════════════════════════
+function buildAlist(){
+  const wrap=document.getElementById('atomwrap');
+  if(atoms.length===0){wrap.style.display='none';return;}
+  wrap.style.display='block';
+  document.getElementById('alist-lbl').textContent=`Atoms (${atoms.length})`;
+  const list=document.getElementById('alist');
+  list.innerHTML='';
+  atoms.forEach((a,i)=>{
+    const info=ad(a.element);
+    const card=document.createElement('div');
+    card.className='acard'+(i===selIdx?' sel':'');
+    card.id='ac'+i;
+    card.innerHTML=`
+      <div class="acard-hd">
+        <div class="adot" style="background:${info.c};box-shadow:0 0 5px ${info.c}"></div>
+        <span class="aname">${a.element}</span>
+        <span class="aidx">#${i+1}</span>
+      </div>
+      <div class="crow">
+        <div class="cf"><label>X (Å)</label>
+          <input type="number" step="0.001" id="cx${i}" value="${a.x.toFixed(4)}"
+            onchange="setCoord(${i},'x',this.value)"></div>
+        <div class="cf"><label>Y (Å)</label>
+          <input type="number" step="0.001" id="cy${i}" value="${a.y.toFixed(4)}"
+            onchange="setCoord(${i},'y',this.value)"></div>
+        <div class="cf"><label>Z (Å)</label>
+          <input type="number" step="0.001" id="cz${i}" value="${a.z.toFixed(4)}"
+            onchange="setCoord(${i},'z',this.value)"></div>
+      </div>`;
+    card.addEventListener('click',ev=>{
+      if(ev.target.tagName==='INPUT') return;
+      selIdx=i; buildAlist(); mark();
+    });
+    list.appendChild(card);
+  });
+}
+
+function updateCoords(){
+  atoms.forEach((a,i)=>{
+    const ex=document.getElementById('cx'+i);
+    const ey=document.getElementById('cy'+i);
+    const ez=document.getElementById('cz'+i);
+    if(ex&&document.activeElement!==ex) ex.value=a.x.toFixed(4);
+    if(ey&&document.activeElement!==ey) ey.value=a.y.toFixed(4);
+    if(ez&&document.activeElement!==ez) ez.value=a.z.toFixed(4);
+    const card=document.getElementById('ac'+i);
+    if(card) card.className='acard'+(i===selIdx?' sel':'');
+  });
+}
+
+function setCoord(idx,axis,val){
+  const v=parseFloat(val); if(isNaN(v)) return;
+  atoms[idx][axis]=v;
+  bonds=detectBonds(atoms);
+  mark();
+}
+
+// ═══════════════════════════════════════════════════════
+//  CENTERING & AUTO-ZOOM
+// ═══════════════════════════════════════════════════════
+function center(arr){
+  let cx=0,cy=0,cz=0;
+  arr.forEach(a=>{cx+=a.x;cy+=a.y;cz+=a.z;});
+  cx/=arr.length; cy/=arr.length; cz/=arr.length;
+  arr.forEach(a=>{a.x-=cx;a.y-=cy;a.z-=cz;});
+}
+
+function autoZoom(arr){
+  let maxD=0;
+  arr.forEach(a=>{
+    const d=Math.sqrt(a.x*a.x+a.y*a.y+a.z*a.z);
+    if(d>maxD)maxD=d;
+  });
+  const minDim=Math.min(W(),H());
+  zoom=maxD>0?Math.min(400,Math.max(20,minDim*0.38/(maxD+0.8))):60;
+}
+
+// ═══════════════════════════════════════════════════════
+//  STATUS BAR
+// ═══════════════════════════════════════════════════════
+function setStatus(ok,msg){
+  const el=document.getElementById('parse-status');
+  el.style.display='block';
+  el.className=ok?'status-ok':'status-err';
+  el.textContent=ok?('✓ '+msg):('✗ '+msg);
+}
+
+// ═══════════════════════════════════════════════════════
+//  PUBLIC ACTIONS
+// ═══════════════════════════════════════════════════════
+function loadMol(){
+  const txt=document.getElementById('inp').value.trim();
+  if(!txt){setStatus(false,'Input is empty');return;}
+  const res=parseInput(txt,currentFmt);
+  if(res.err){setStatus(false,res.err);return;}
+  atoms=res.atoms;
+  center(atoms);
+  bonds=detectBonds(atoms);
+  rotMat=mI(); panX=0; panY=0; selIdx=-1; hoverIdx=-1;
+  autoZoom(atoms);
+  buildAlist(); updateLegend(); mark();
+  document.getElementById('st-a').textContent=atoms.length;
+  document.getElementById('st-b').textContent=bonds.length;
+  document.getElementById('st-f').textContent=currentFmt.toUpperCase();
+  document.getElementById('hint').textContent=
+    mode==='rotate'?'Drag=Rotate · Scroll=Zoom':'Click atom → select · Drag=Move';
+  setStatus(true,`${atoms.length} atoms, ${bonds.length} bonds loaded`);
+}
+
+function loadEx(name){
+  if(!name||!EX[name])return;
+  setFmt('xyz');
+  document.getElementById('inp').value=EX[name];
+  loadMol();
+}
+
+function setMode(m){
+  mode=m;
+  document.getElementById('tb-rot').classList.toggle('active',m==='rotate');
+  document.getElementById('tb-edit').classList.toggle('active',m==='edit');
+  selIdx=-1; updateCoords(); mark();
+  document.getElementById('hint').textContent=
+    m==='rotate'?'Drag=Rotate · Scroll=Zoom':'Click atom → select · Drag=Move';
+}
+
+function cycleStyle(){
+  styleIdx=(styleIdx+1)%STYLES.length;
+  document.getElementById('tb-style').textContent='⬡ '+STYLES[styleIdx];
+  mark();
+}
+
+function resetView(){
+  rotMat=mI(); panX=0; panY=0;
+  autoZoom(atoms); mark();
+}
+
+function exportXYZ(){
+  if(!atoms.length)return;
+  let s=`${atoms.length}\nExported from 3D Molecule Viewer\n`;
+  atoms.forEach(a=>{s+=`${a.element.padEnd(4)} ${a.x.toFixed(6).padStart(13)} ${a.y.toFixed(6).padStart(13)} ${a.z.toFixed(6).padStart(13)}\n`;});
+  const url=URL.createObjectURL(new Blob([s],{type:'text/plain'}));
+  const ln=document.createElement('a');ln.href=url;ln.download='molecule.xyz';ln.click();
+  URL.revokeObjectURL(url);
+}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded',()=>{
+  resizeCanvas();
+  loadEx('water');
+});
+</script>
+</body>
+</html>
